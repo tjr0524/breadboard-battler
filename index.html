@@ -4,30 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Breadboard Battler</title>
-<link rel="stylesheet" href="./style.css?v=0.0.3-test3">
+<link rel="stylesheet" href="./style.css?v=0.0.4-test4">
 </head>
 <body>
 <div id="app">
 <header>
   <div>
     <div class="title">Breadboard Battler</div>
-    <div class="ver">TEST v0.0.3-test3 · drag tray + explicit ± power</div>
+    <div class="ver">TEST v0.0.4-test4 · direct wires + board editing</div>
   </div>
   <div class="credits">CR <b id="credits">100</b></div>
 </header>
 
 <div class="card battle">
-  <div>
-    <b>CORE · S<span id="stage">1</span></b>
-    <div class="bar"><div class="fill" id="pbar"></div></div>
-    <div class="mini">HP <span id="php">100</span> · 회복 <span id="heal">0</span>/s</div>
-  </div>
+  <div><b>CORE · S<span id="stage">1</span></b><div class="bar"><div class="fill" id="pbar"></div></div><div class="mini">HP <span id="php">100</span> · 회복 <span id="heal">0</span>/s</div></div>
   <div class="vs">AUTO<br>VS</div>
-  <div class="enemy">
-    <b>SCRAP DRONE</b>
-    <div class="bar"><div class="fill" id="ebar"></div></div>
-    <div class="mini">HP <span id="ehp">180</span> · 재생 1.2/s</div>
-  </div>
+  <div class="enemy"><b>SCRAP DRONE</b><div class="bar"><div class="fill" id="ebar"></div></div><div class="mini">HP <span id="ehp">180</span> · 재생 1.2/s</div></div>
 </div>
 
 <div class="card"><div class="stats">
@@ -38,10 +30,7 @@
 </div></div>
 
 <div class="card source-card">
-  <div class="source-copy">
-    <b>CORE POWER</b>
-    <span>기체 기본 발전원 · 빵판 공간을 차지하지 않음</span>
-  </div>
+  <div class="source-copy"><b>CORE POWER</b><span>기체 기본 발전원 · 보드 밖에 고정</span></div>
   <div class="source-terminals">
     <span class="source-chip plus"><i></i> +12V</span>
     <span class="source-chip minus"><i></i> GND</span>
@@ -50,15 +39,13 @@
 
 <div class="card tools-card"><div class="tools">
   <button class="tool reco" id="reco">추천 배치</button>
-  <button class="tool" id="wire">점퍼선</button>
-  <button class="tool" id="rotate">90° 회전</button>
-  <button class="tool" id="erase">지우기</button>
+  <button class="tool" id="wire">+ 점퍼선</button>
   <button class="tool" id="reset">초기화</button>
 </div></div>
 
 <div class="board-note">
-  <span><b>가로 5홀</b> 내부 연결</span>
-  <span><b>빨강</b> +12V · <b>검정</b> GND</span>
+  <span><b>가로 5홀</b> = 한 노드</span>
+  <span>트레이 닫힘: <b>드래그 편집</b></span>
 </div>
 
 <div class="board" id="board">
@@ -68,10 +55,13 @@
   <div class="grid" id="grid"></div>
   <div class="parts" id="parts"></div>
   <div class="drop-preview" id="dropPreview"></div>
+  <div class="selection-tools" id="selectionTools">
+    <button id="selRotate" title="회전">↻</button>
+    <button id="selDelete" title="삭제">✕</button>
+  </div>
 </div>
 
-<div class="hint" id="hint"><b>부품 버튼</b>을 열고 부품을 빵판 위로 드래그하세요.</div>
-
+<div class="hint" id="hint"><b>부품 트레이</b>에서 아이콘을 드래그해 설치하세요.</div>
 <div class="actions">
   <button class="action" id="check">회로 검사</button>
   <button class="action go" id="fight">전투 시작</button>
@@ -84,8 +74,8 @@
   </button>
   <div class="part-dock" id="partDock">
     <div class="dock-head">
-      <div><b>부품 트레이</b><span>드래그해서 빵판에 설치</span></div>
-      <span class="dock-tip">회전은 위 버튼</span>
+      <div><b>부품 트레이</b><span>카드 스와이프 · 부품 그림 드래그</span></div>
+      <span class="dock-tip">설치 후 트레이 자동 닫힘</span>
     </div>
     <div class="palette" id="palette"></div>
   </div>
@@ -93,15 +83,13 @@
 
 <div class="drag-ghost" id="dragGhost"></div>
 
-<div class="modal" id="modal">
-  <div class="sheet">
-    <h2>STAGE CLEAR</h2>
-    <p>보상으로 부품을 구매하고 다음 전투 전에 빵판을 다시 구성하세요.</p>
-    <div class="shop" id="shop"></div>
-    <button class="next" id="next">다음 스테이지</button>
-  </div>
-</div>
+<div class="modal" id="modal"><div class="sheet">
+  <h2>STAGE CLEAR</h2>
+  <p>보상으로 부품을 구매하고 다음 전투 전에 빵판을 다시 구성하세요.</p>
+  <div class="shop" id="shop"></div>
+  <button class="next" id="next">다음 스테이지</button>
+</div></div>
 
-<script src="./app.js?v=0.0.3-test3"></script>
+<script src="./app.js?v=0.0.4-test4"></script>
 </body>
 </html>
