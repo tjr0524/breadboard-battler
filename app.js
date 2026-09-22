@@ -28,57 +28,122 @@ function add(t,x,y,r){
  if(!st.inv[t]||!canPlace(t,x,y,r,null))return null;
  st.inv[t]--;var p={id:nextPart++,t:t,x:x,y:y,r:r||0};st.parts.push(p);return p
 }
-function edge(g,a,b,tag){if(a===b)return;(g[a]||(g[a]=[])).push({to:b,tag:tag});(g[b]||(g[b]=[])).push({to:a,tag:tag})}
-function buildGraph(){var g={};st.wires.forEach(function(w){edge(g,nodeOf(w.a.x,w.a.y),nodeOf(w.b.x,w.b.y),'wire')});st.parts.forEach(function(p){if(p.t==='resistor'){var t=terminals(p);edge(g,nodeOf(t[0].x,t[0].y),nodeOf(t[1].x,t[1].y),'resistor')}});return g}
-function bfs(g,start){var seen={},queue=[start];while(queue.length){var n=queue.shift();if(seen[n])continue;seen[n]=1;(g[n]||[]).forEach(function(e){if(!seen[e.to])queue.push(e.to)})}return seen}
-function partNodes(p){var t=terminals(p);return{plus:nodeOf(t[0].x,t[0].y),minus:nodeOf(t[1].x,t[1].y)}}
+function partNodes(p){
+ var t=terminals(p);
+ return{plus:nodeOf(t[0].x,t[0].y),minus:nodeOf(t[1].x,t[1].y)}
+}
+function clamp01(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+function buildNetMap(){
+ var parent={};
+ function add(n){n=String(n);if(parent[n]==null)parent[n]=n;return n}
+ function find(n){n=add(n);var r=n;while(parent[r]!==r)r=parent[r];while(parent[n]!==n){var p=parent[n];parent[n]=r;n=p}return r}
+ function union(a,b){a=find(a);b=find(b);if(a!==b)parent[b]=a}
+ for(var y=0;y<R;y++){add(y+':L');add(y+':R')}
+ add(SOURCE_PLUS);add(SOURCE_MINUS);
+ st.parts.forEach(function(p){var n=partNodes(p);add(n.plus);add(n.minus)});
+ st.wires.forEach(function(w){union(nodeOf(w.a.x,w.a.y),nodeOf(w.b.x,w.b.y))});
+ Object.keys(parent).forEach(find);
+ return{find:find,parent:parent}
+}
+function pairKey(a,b){return a<b?a+'|'+b:b+'|'+a}
 function calc(){
- var g=buildGraph(),pos=bfs(g,SOURCE_PLUS),neg=bfs(g,SOURCE_MINUS),supply=2.5,need=0,dps=0,heal=0,warn=[],capReady=0,hardShort=!!pos[SOURCE_MINUS];
+ var API=window.BreadboardCircuitEngine;
+ if(!API||!API.CircuitEngine)return{pos:{},neg:{},s:2.5,n:0,d:0,h:0,w:['회로 엔진을 불러오지 못했습니다'],cap:0,short:false,parts:{}};
+
+ var net=buildNetMap(),ground=net.find(SOURCE_MINUS),plus=net.find(SOURCE_PLUS);
+ var eng=new API.CircuitEngine({ground:ground,gmin:1e-10});
+ eng.addSource('core',plus,ground,{voltage:12,internalResistance:.02,currentLimit:2.5,allowSink:false});
+
  st.parts.forEach(function(p){
-   var n=partNodes(p);if(n.plus===n.minus)warn.push(defs[p.t].n+' 양단이 같은 노드입니다');
-   if(p.t==='battery'){if(pos[n.plus]&&neg[n.minus])supply+=.8;else if(pos[n.minus]&&neg[n.plus])warn.push('배터리 극성이 반대입니다')}
-   if(p.t==='cap'){if(pos[n.plus]&&neg[n.minus])capReady++;else if(pos[n.minus]&&neg[n.plus])warn.push('캐패시터 극성이 반대입니다')}
+   var n=partNodes(p),a=net.find(n.plus),b=net.find(n.minus),id='part-'+p.id;
+   if(p.t==='resistor')eng.addResistor(id,a,b,6,{partId:p.id});
+   else if(p.t==='cap')eng.addCapacitor(id,a,b,.25,{initialVoltage:0,maxVoltage:16,meta:{partId:p.id}});
+   else if(p.t==='battery')eng.addBattery(id,a,b,{voltage:12,internalResistance:.12,currentLimit:.8,sinkLimit:.5,capacityJ:240,soc:1,meta:{partId:p.id}});
+   else if(p.t==='gun')eng.addLoad(id,a,b,{ratedVoltage:12,ratedCurrent:.8,minVoltage:7,meta:{partId:p.id}});
+   else if(p.t==='repair')eng.addLoad(id,a,b,{ratedVoltage:12,ratedCurrent:.7,minVoltage:7,meta:{partId:p.id}});
+   else if(p.t==='pulse')eng.addPulseLoad(id,a,b,{ratedVoltage:12,pulseCurrent:8,minVoltage:7,active:false,meta:{partId:p.id}})
  });
+
+ var result=eng.solveDC(),capPairs={},parts={},warn=[],dps=0,heal=0,need=0,batteries=0;
  st.parts.forEach(function(p){
-   if(p.t==='resistor'||p.t==='cap'||p.t==='battery')return;
-   var n=partNodes(p),on=pos[n.plus]&&neg[n.minus],rev=pos[n.minus]&&neg[n.plus];
-   if(rev){warn.push(defs[p.t].n+' 극성이 반대입니다');return}if(!on)return;
-   if(p.t==='gun'){need+=.8;dps+=10}if(p.t==='repair'){need+=.7;heal+=3}if(p.t==='pulse'){need+=1.2;if(capReady)dps+=18;else warn.push('펄스포에 충전된 CAP이 없습니다')}
+   if(p.t!=='cap')return;
+   var n=partNodes(p),a=net.find(n.plus),b=net.find(n.minus),br=result.branches['part-'+p.id];
+   if(br&&br.voltage>1)capPairs[pairKey(a,b)]=1
  });
- if(hardShort){warn.unshift('CORE +12V와 GND가 직접 연결되었습니다');dps=0;heal=0}
- var f=need?Math.min(1,supply/need):1;if(need>supply)warn.push('공급 전류가 부족합니다');
- return{pos:pos,neg:neg,s:supply,n:need,d:dps*f,h:heal*f,w:warn,cap:capReady,short:hardShort}
+
+ st.parts.forEach(function(p){
+   var n=partNodes(p),a=net.find(n.plus),b=net.find(n.minus),br=result.branches['part-'+p.id]||{voltage:0,current:0,power:0,status:'off'};
+   var v=br.voltage||0,i=br.current||0,same=a===b,reversed=!!defs[p.t].polar&&v<-.5,sharedCap=false,live=false;
+   if(p.t==='pulse')sharedCap=!!capPairs[pairKey(a,b)];
+
+   if(p.t==='gun'){
+     if(v>3){var scale=clamp01(v/12,0,1.25);dps+=10*scale;need+=Math.max(0,i);live=v>=7}
+   } else if(p.t==='repair'){
+     if(v>3){var hs=clamp01(v/12,0,1.25);heal+=3*hs;need+=Math.max(0,i);live=v>=7}
+   } else if(p.t==='pulse'){
+     if(v>=7&&sharedCap){dps+=18*clamp01(v/12,0,1.2);live=true}
+   } else if(p.t==='cap'){
+     live=Math.abs(v)>.5
+   } else if(p.t==='battery'){
+     batteries++;live=Math.abs(v)>5
+   } else if(p.t==='resistor'){
+     live=Math.abs(i)>.001
+   }
+
+   if(same)warn.push(defs[p.t].n+' 양단이 같은 노드입니다');
+   else if(reversed)warn.push(defs[p.t].n+' 극성이 반대입니다');
+   else if((p.t==='gun'||p.t==='repair')&&v>1&&v<7)warn.push(defs[p.t].n+' 저전압 '+v.toFixed(1)+'V');
+   else if(p.t==='pulse'&&v>=7&&!sharedCap)warn.push('펄스포와 같은 버스에 사용 가능한 CAP이 없습니다');
+
+   parts[p.id]={branch:br,voltage:v,current:i,same:same,reversed:reversed,sharedCap:sharedCap,live:live,a:a,b:b}
+ });
+
+ (result.warnings||[]).forEach(function(w){if(w.type==='source-short')warn.unshift('CORE +12V와 GND가 직접 단락되었습니다')});
+ var core=result.branches.core||{status:'off',current:0};
+ if(core.status==='cc+')warn.push('CORE가 '+core.current.toFixed(1)+'A 전류 제한 상태입니다');
+
+ var pos={},neg={},short=plus===ground;
+ for(var y=0;y<R;y++)['L','R'].forEach(function(side){
+   var raw=y+':'+side,root=net.find(raw),v=result.voltages[root]||0;
+   neg[raw]=root===ground;
+   pos[raw]=short&&root===ground?true:v>.35
+ });
+
+ return{
+   pos:pos,neg:neg,s:2.5+batteries*.8,n:need,d:dps,h:heal,w:warn,cap:Object.keys(capPairs).length,
+   short:short,parts:parts,engine:eng,result:result,net:net,core:core
+ }
 }
 
-
 function partStatus(p,ev){
- var n=partNodes(p),same=n.plus===n.minus,hasPlus=!!ev.pos[n.plus],hasGnd=!!ev.neg[n.minus];
- var rev=!!ev.pos[n.minus]&&!!ev.neg[n.plus],on=hasPlus&&hasGnd;
- if(same)return{text:'ERR',cls:'state-bad'};
- if(rev)return{text:'REV',cls:'state-bad'};
+ var pr=ev.parts&&ev.parts[p.id];
+ if(!pr)return{text:'OFF',cls:'state-off'};
+ if(pr.same)return{text:'ERR',cls:'state-bad'};
+ if(pr.reversed)return{text:'REV',cls:'state-bad'};
+ var v=pr.voltage||0,i=pr.current||0;
 
  if(p.t==='resistor'){
-   var tt=terminals(p),na=nodeOf(tt[0].x,tt[0].y),nb=nodeOf(tt[1].x,tt[1].y);
-   var touched=!!ev.pos[na]||!!ev.pos[nb]||!!ev.neg[na]||!!ev.neg[nb];
-   return touched?{text:'LINK',cls:'state-warn'}:{text:'OFF',cls:'state-off'}
+   return Math.abs(i)>.001?{text:'I '+Math.abs(i).toFixed(1)+'A',cls:'state-on'}:{text:'OFF',cls:'state-off'}
  }
  if(p.t==='cap'){
-   if(on)return{text:'CHG',cls:'state-on'};
-   if(hasPlus)return{text:'+만',cls:'state-partial'};
-   if(hasGnd)return{text:'GND만',cls:'state-partial'};
-   return{text:'OFF',cls:'state-off'}
+   if(Math.abs(v)<.5)return{text:'OFF',cls:'state-off'};
+   return{text:'BUS '+Math.abs(v).toFixed(1)+'V',cls:'state-on'}
  }
  if(p.t==='battery'){
-   if(on)return{text:'BUF',cls:'state-on'};
-   if(hasPlus)return{text:'+만',cls:'state-partial'};
-   if(hasGnd)return{text:'GND만',cls:'state-partial'};
-   return{text:'OFF',cls:'state-off'}
+   if(i>.05)return{text:'OUT '+i.toFixed(1)+'A',cls:'state-on'};
+   if(i<-.05)return{text:'CHG '+Math.abs(i).toFixed(1)+'A',cls:'state-partial'};
+   return Math.abs(v)>5?{text:'BUF',cls:'state-on'}:{text:'OFF',cls:'state-off'}
  }
- if(p.t==='pulse'&&on&&!ev.cap)return{text:'CAP?',cls:'state-warn'};
- if(on)return{text:'ON',cls:'state-on'};
- if(hasPlus)return{text:'+만',cls:'state-partial'};
- if(hasGnd)return{text:'GND만',cls:'state-partial'};
- return{text:'OFF',cls:'state-off'}
+ if(p.t==='pulse'){
+   if(v<1)return{text:'OFF',cls:'state-off'};
+   if(v<7)return{text:'LOW '+v.toFixed(1)+'V',cls:'state-warn'};
+   if(!pr.sharedCap)return{text:'CAP?',cls:'state-warn'};
+   return{text:'READY '+v.toFixed(1)+'V',cls:'state-on'}
+ }
+ if(v<1)return{text:'OFF',cls:'state-off'};
+ if(v<7)return{text:'LOW '+v.toFixed(1)+'V',cls:'state-warn'};
+ if(v>13.8)return{text:'OVER '+v.toFixed(1)+'V',cls:'state-bad'};
+ return{text:'ON '+v.toFixed(1)+'V',cls:'state-on'}
 }
 
 function makeBoard(){
@@ -166,10 +231,12 @@ function bindWireEndDrag(el,w,key,vis){
 function drawParts(ev){
  var pl=q('#parts');pl.innerHTML='';
  st.parts.forEach(function(p){
-   var d=dims(p.t,p.r),nodes=partNodes(p),sel=st.selected&&st.selected.kind==='part'&&st.selected.id===p.id;
+   var d=dims(p.t,p.r),sel=st.selected&&st.selected.kind==='part'&&st.selected.id===p.id;
    var b=document.createElement('div');b.className='part '+p.t+(sel?' selected':'');
-   var powered=ev.pos[nodes.plus]&&ev.neg[nodes.minus],reversed=ev.pos[nodes.minus]&&ev.neg[nodes.plus];if(powered)b.classList.add('powered');if(reversed||nodes.plus===nodes.minus)b.classList.add('bad');
-   b.style.left=(p.x*10)+'%';b.style.top=(p.y*100/R)+'%';b.style.width=(d.w*10)+'%';b.style.height=(d.h*100/R)+'%';b.innerHTML=defs[p.t].s+'<small>'+defs[p.t].n+'</small>';var ps=partStatus(p,ev),badge=document.createElement('span');badge.className='part-state '+ps.cls;badge.textContent=ps.text;b.appendChild(badge);
+   var ps=partStatus(p,ev);if(ps.cls==='state-on')b.classList.add('powered');if(ps.cls==='state-bad')b.classList.add('bad');
+   b.style.left=(p.x*10)+'%';b.style.top=(p.y*100/R)+'%';b.style.width=(d.w*10)+'%';b.style.height=(d.h*100/R)+'%';
+   b.innerHTML=defs[p.t].s+'<small>'+defs[p.t].n+'</small>';
+   var badge=document.createElement('span');badge.className='part-state '+ps.cls;badge.textContent=ps.text;b.appendChild(badge);
    terminals(p).forEach(function(t){var dot=document.createElement('i');dot.className='pin '+t.role;dot.style.left=((t.x-p.x+.5)/d.w*100)+'%';dot.style.top=((t.y-p.y+.5)/d.h*100)+'%';b.appendChild(dot)});
    bindPlacedPart(b,p);pl.appendChild(b)
  })
