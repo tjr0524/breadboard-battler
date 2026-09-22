@@ -65,3 +65,27 @@ header{display:flex;justify-content:space-between;align-items:center;margin-bott
 .modal{position:fixed;inset:0;background:#05080ccb;display:none;align-items:flex-end;justify-content:center;padding:12px;z-index:50}.modal.show{display:flex}.sheet{width:min(430px,100%);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px}
 .sheet h2{margin:0 0 4px;font-size:17px}.sheet p{font-size:11px;color:var(--muted)}.shop{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.offer{min-height:105px;border:1px solid var(--line);background:var(--panel2);border-radius:11px;padding:9px;text-align:left}
 .offer b,.offer span,.offer em{display:block}.offer b{font-size:11px}.offer span{font-size:9px;color:var(--muted);margin-top:4px}.offer em{font-size:11px;font-style:normal;color:#f2d27c;margin-top:9px}.offer:disabled{opacity:.35}.next{width:100%;margin-top:9px;min-height:44px;border:0;border-radius:11px;background:#1f7059;font-weight:900}
+
+
+/* power / component state visualization */
+.cell.net-plus{background:rgba(224,78,78,.20)}
+.cell.net-minus{background:rgba(72,117,176,.18)}
+.cell.net-both{background:rgba(170,78,205,.28)}
+.cell.net-plus:after{background:#e45959;box-shadow:0 0 0 2px #7f3535,0 0 7px rgba(228,89,89,.7);opacity:1}
+.cell.net-minus:after{background:#527db8;box-shadow:0 0 0 2px #304a6d,0 0 7px rgba(82,125,184,.65);opacity:1}
+.cell.net-both:after{background:#bd62dd;box-shadow:0 0 0 2px #6d357f,0 0 9px rgba(189,98,221,.8);opacity:1}
+.wire.net-plus{stroke:#e65c5c}
+.wire.net-minus{stroke:#5c83bd}
+.wire.net-both{stroke:#c15fe0}
+.wire.selected{stroke:#fff}
+.part-state{
+  position:absolute;right:2px;bottom:2px;z-index:4;min-width:20px;max-width:70%;
+  padding:2px 4px;border-radius:999px;font-size:7px;line-height:1.15;font-weight:1000;
+  color:#fff;background:#5d6873;border:1px solid rgba(255,255,255,.55);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+}
+.part-state.state-on{background:#18865f}
+.part-state.state-off{background:#65717c}
+.part-state.state-warn{background:#aa7818}
+.part-state.state-partial{background:#4775a7}
+.part-state.state-bad{background:#b94444}
