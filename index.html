@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Breadboard Battler</title>
-<link rel="stylesheet" href="./style.css?v=0.0.7-test7">
+<link rel="stylesheet" href="./style.css?v=0.0.8-test8">
 </head>
 <body>
 <div id="app">
 <header>
   <div>
     <div class="title">Breadboard Battler</div>
-    <div class="ver">TEST v0.0.7-test7 · node voltage visualization</div>
+    <div class="ver">TEST v0.0.8-test8 · vertical rails + floating nodes</div>
   </div>
   <div class="credits">CR <b id="credits">100</b></div>
 </header>
@@ -45,12 +45,13 @@
 
 <div class="board-note">
   <span><b>가로 5홀</b> = 한 노드</span>
-  <span>트레이 닫힘: <b>드래그 편집</b></span>
+  <span><b>세로 + / GND Rail</b> · 오른쪽은 독립</span>
 </div>
 
 <div class="board" id="board">
   <div class="trench"></div>
   <div class="strip-layer" id="stripLayer"></div>
+  <div class="rail-layer" id="railLayer"></div>
   <div class="node-label-layer" id="nodeLabelLayer"></div>
   <svg id="wires" viewBox="0 0 1000 1200" preserveAspectRatio="none"><g id="wireLayer"></g></svg>
   <div class="grid" id="grid"></div>
@@ -92,6 +93,6 @@
 </div></div>
 
 <script src="./circuit-engine.js?v=0.1.1"></script>
-<script src="./app.js?v=0.0.7-test7"></script>
+<script src="./app.js?v=0.0.8-test8"></script>
 </body>
 </html>
