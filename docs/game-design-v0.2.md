@@ -208,6 +208,28 @@ Selected part controls should appear near the selected object:
 
 This avoids requiring a separate global rotate/delete mode.
 
+### Live power and component-state visualization
+
+During board editing, the player should be able to understand circuit state without starting combat.
+
+Recommended visualization:
+- + supply network: red node/hole and jumper highlight;
+- GND network: blue node/hole and jumper highlight;
+- + and GND accidentally reaching the same node: purple/error highlight;
+- every placed component shows a compact live status badge.
+
+Initial compact status set:
+- `ON`: correctly powered active device;
+- `OFF`: no usable power;
+- `+ only` / `GND only`: incomplete connection;
+- `REV`: reverse polarity;
+- `CHG`: capacitor connected and charged/charging;
+- `BUF`: battery connected as an available buffer;
+- `CAP?`: pulse device is powered but missing usable capacitor support;
+- `ERR`: invalid/same-node connection.
+
+The default board view should prioritize these simple states over raw voltage/current numbers. Detailed electrical values can appear in an inspect/details view later.
+
 ## 10. Combat
 
 Combat is mostly automatic.
