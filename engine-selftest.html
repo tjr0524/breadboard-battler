@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Breadboard Circuit Engine Self Test</title>
+<style>
+body{font-family:system-ui;background:#0b1016;color:#eef4f8;margin:0;padding:20px}main{max-width:850px;margin:auto}
+h1{font-size:22px}.case{background:#151d27;border:1px solid #2d3a48;border-radius:12px;padding:14px;margin:10px 0}
+.pass{color:#62d59f}.fail{color:#ef7777}pre{white-space:pre-wrap;background:#0d141c;padding:10px;border-radius:8px;color:#bdc9d4}
+</style>
+</head>
+<body><main>
+<h1>Breadboard Circuit Engine v0.1 self-test</h1>
+<div id="out"></div>
+<script src="./circuit-engine.js"></script>
+<script>
+(function(){
+const E=BreadboardCircuitEngine.CircuitEngine,out=document.querySelector('#out');
+function card(name,ok,lines){
+ const d=document.createElement('div');d.className='case';
+ d.innerHTML='<b>'+name+'</b> <strong class="'+(ok?'pass':'fail')+'">'+(ok?'PASS':'FAIL')+'</strong><pre>'+lines.join('\n')+'</pre>';
+ out.appendChild(d);
+}
+function near(v,t,tol){return Math.abs(v-t)<=tol}
+
+// 1 single gun
+{
+ const e=new E({ground:'g'});
+ e.addSource('core','v','g',{voltage:12,internalResistance:.02,currentLimit:2.5});
+ e.addLoad('gun','v','g',{ratedVoltage:12,ratedCurrent:1.5,minVoltage:7});
+ const r=e.solveDC(), v=r.branches.gun.voltage, i=r.branches.gun.current;
+ card('Single gun',near(v,12,.1)&&near(i,1.5,.05),['gun V='+v.toFixed(3),'gun I='+i.toFixed(3),'core='+r.branches.core.status]);
+}
+
+// 2 two guns in series
+{
+ const e=new E({ground:'g'});
+ e.addSource('core','v','g',{voltage:12,internalResistance:.02,currentLimit:2.5});
+ e.addLoad('g1','v','m',{ratedVoltage:12,ratedCurrent:1.5,minVoltage:7});
+ e.addLoad('g2','m','g',{ratedVoltage:12,ratedCurrent:1.5,minVoltage:7});
+ const r=e.solveDC();
+ const v1=r.branches.g1.voltage,v2=r.branches.g2.voltage;
+ card('Two guns in series',near(v1,6,.12)&&near(v2,6,.12),['GUN1='+v1.toFixed(3)+' V / '+r.branches.g1.status,'GUN2='+v2.toFixed(3)+' V / '+r.branches.g2.status,'mid node='+r.voltages.m.toFixed(3)+' V']);
+}
+
+// 3 two guns parallel -> current limit droop
+{
+ const e=new E({ground:'g'});
+ e.addSource('core','v','g',{voltage:12,internalResistance:.02,currentLimit:2.5});
+ e.addLoad('g1','v','g',{ratedVoltage:12,ratedCurrent:1.5,minVoltage:7});
+ e.addLoad('g2','v','g',{ratedVoltage:12,ratedCurrent:1.5,minVoltage:7});
+ const r=e.solveDC(),v=r.voltages.v,total=r.branches.g1.current+r.branches.g2.current;
+ card('Two guns in parallel / CORE current limit',near(total,2.5,.03)&&v<12,['bus='+v.toFixed(3)+' V','total load='+total.toFixed(3)+' A','core='+r.branches.core.status]);
+}
+
+// 4 capacitor shared bus supports pulse + gun
+{
+ const e=new E({ground:'g'});
+ e.addSource('core','v','g',{voltage:12,internalResistance:.02,currentLimit:2.5});
+ e.addCapacitor('cap','v','g',0.5,{initialVoltage:0,maxVoltage:16});
+ e.addLoad('gun','v','g',{ratedVoltage:12,ratedCurrent:1.0,minVoltage:7,active:false});
+ e.addPulseLoad('pulse','v','g',{ratedVoltage:12,pulseCurrent:8,minVoltage:7,active:false});
+ for(let k=0;k<300;k++)e.step(.01);
+ const before=e.getState('cap').voltage;
+ e.setActive('gun',true);e.setActive('pulse',true);
+ const r=e.step(.01), ci=r.branches.cap.current;
+ card('Shared CAP bus during pulse',before>10&&ci<0,['CAP before='+before.toFixed(3)+' V','bus during pulse='+r.voltages.v.toFixed(3)+' V','CAP current='+ci.toFixed(3)+' A (negative = discharging into bus)','gun current='+r.branches.gun.current.toFixed(3)+' A','pulse current='+r.branches.pulse.current.toFixed(3)+' A']);
+}
+
+// 5 diode branch isolation sanity
+{
+ const e=new E({ground:'g'});
+ e.addSource('core','main','g',{voltage:12,internalResistance:.02,currentLimit:2.5});
+ e.addDiode('d','main','pulsebus',{forwardVoltage:.4,onResistance:.05});
+ e.addCapacitor('cap','pulsebus','g',0.3,{initialVoltage:0,maxVoltage:16});
+ e.addPulseLoad('pulse','pulsebus','g',{ratedVoltage:12,pulseCurrent:8,minVoltage:7,active:false});
+ for(let k=0;k<300;k++)e.step(.01);
+ const charged=e.getState('cap').voltage;
+ e.setActive('pulse',true);const r=e.step(.01);
+ card('Diode-isolated pulse branch',charged>9,['pulse-bus charged='+charged.toFixed(3)+' V','main='+r.voltages.main.toFixed(3)+' V','pulsebus='+r.voltages.pulsebus.toFixed(3)+' V','diode='+r.branches.d.status]);
+}
+})();
+</script>
+</main></body></html>
