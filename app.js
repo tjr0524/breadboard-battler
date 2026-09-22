@@ -146,6 +146,25 @@ function partStatus(p,ev){
  return{text:'ON '+v.toFixed(1)+'V',cls:'state-on'}
 }
 
+function voltageColor(v){
+ v=+v||0;
+ if(v<0){
+   var m=Math.min(1,Math.abs(v)/12);
+   return 'hsl('+(270+30*m)+',78%,'+(48+5*m)+'%)';
+ }
+ var t=Math.max(0,Math.min(1,v/12));
+ var hue=220*(1-t);
+ if(v>12){
+   var over=Math.min(1,(v-12)/6);
+   hue=360-35*over;
+ }
+ return 'hsl('+hue+',78%,52%)'
+}
+function voltageText(v){
+ if(Math.abs(v)<0.05)return '0.0V';
+ return v.toFixed(1)+'V'
+}
+
 function makeBoard(){
  var sl=q('#stripLayer'),grid=q('#grid');
  for(var y=0;y<R;y++)['L','R'].forEach(function(side){var line=document.createElement('div');line.className='strip-line';if(y===10&&side==='L')line.classList.add('core-plus');if(y===11&&side==='L')line.classList.add('core-minus');line.style.top=((y+.5)*100/R)+'%';line.style.left=side==='L'?'4.8%':'54.8%';line.style.width='40.4%';sl.appendChild(line)});
@@ -254,16 +273,46 @@ function updateBoardPartDrag(cx,cy,p){
 }
 
 function drawGrid(ev){
+ var labels=q('#nodeLabelLayer');labels.innerHTML='';
+ var shown={};
+
  document.querySelectorAll('.cell').forEach(function(c){
-   c.classList.remove('same-node','wire-start','net-plus','net-minus','net-both');
-   var x=+c.dataset.x,y=+c.dataset.y,n=nodeOf(x,y),p=!!ev.pos[n],g=!!ev.neg[n];
-   if(p&&g)c.classList.add('net-both');else if(p)c.classList.add('net-plus');else if(g)c.classList.add('net-minus');
+   c.classList.remove('same-node','wire-start','net-plus','net-minus','net-both','voltage-live');
+   c.style.background='';
+   var x=+c.dataset.x,y=+c.dataset.y,raw=nodeOf(x,y);
+   var root=ev.net&&ev.net.find?ev.net.find(raw):raw;
+   var v=ev.result&&ev.result.voltages?+(ev.result.voltages[root]||0):0;
+
+   c.classList.add('voltage-live');
+   c.style.background=voltageColor(v)+'22';
+   c.style.setProperty('--node-color',voltageColor(v));
+   c.style.boxShadow='inset 0 0 0 1px '+voltageColor(v)+'33';
+
+   if(!shown[raw]){
+     shown[raw]=1;
+     var lab=document.createElement('span');
+     lab.className='node-voltage '+(x<5?'left':'right');
+     lab.style.top=((y+.5)*100/R)+'%';
+     lab.style.borderColor=voltageColor(v);
+     lab.textContent=voltageText(v);
+     labels.appendChild(lab)
+   }
+
    if(st.wireStart){
-     if(n===nodeOf(st.wireStart.x,st.wireStart.y))c.classList.add('same-node');
+     if(raw===nodeOf(st.wireStart.x,st.wireStart.y))c.classList.add('same-node');
      if(x===st.wireStart.x&&y===st.wireStart.y)c.classList.add('wire-start')
    }
+ });
+
+ // Hole color follows the electrical node voltage.
+ document.querySelectorAll('.cell').forEach(function(c){
+   var x=+c.dataset.x,y=+c.dataset.y,raw=nodeOf(x,y);
+   var root=ev.net&&ev.net.find?ev.net.find(raw):raw;
+   var v=ev.result&&ev.result.voltages?+(ev.result.voltages[root]||0):0;
+   c.style.setProperty('--hole-voltage-color',voltageColor(v));
  })
 }
+
 function miniShape(t){var d=defs[t],scale=Math.min(27/d.w,27/d.h);return '<div class="mini-shape" data-part="'+t+'"><div class="mini-body '+t+'" style="width:'+Math.max(8,d.w*scale)+'px;height:'+Math.max(8,d.h*scale)+'px"></div></div>'}
 function palette(){
  var p=q('#palette');p.innerHTML='';
