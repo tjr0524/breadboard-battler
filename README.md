@@ -16,9 +16,9 @@ Build a combat system on a limited breadboard, then let the completed circuit fi
 
 ## Current status
 
-**Concept / prototype phase — v0.1**
+**Concept / prototype phase — v0.2**
 
-The design is intentionally fluid. See [docs/game-design-v0.1.md](docs/game-design-v0.1.md).
+The design is intentionally fluid. See [docs/game-design-v0.2.md](docs/game-design-v0.1.md).
 
 ## Branches
 
