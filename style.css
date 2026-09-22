@@ -157,3 +157,9 @@ header{display:flex;justify-content:space-between;align-items:center;margin-bott
 .node-voltage.left{left:13.1%;transform:translate(-100%,-50%)}
 .node-voltage.right{right:13.1%;transform:translate(100%,-50%)}
 .node-voltage.float{display:none}
+
+
+/* keep voltage labels completely outside the physical board */
+.board{width:min(100%,330px);aspect-ratio:10/12;overflow:visible}
+.node-voltage.left{left:-4px;right:auto;transform:translate(-100%,-50%)}
+.node-voltage.right{right:-4px;left:auto;transform:translate(100%,-50%)}
