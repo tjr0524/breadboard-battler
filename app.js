@@ -71,30 +71,65 @@ function gridFromClient(cx,cy){
  var rect=q('#board').getBoundingClientRect(),cw=rect.width/C,ch=rect.height/R;
  return{x:Math.max(0,Math.min(C-1,Math.round((cx-rect.left)/cw-.5))),y:Math.max(0,Math.min(R-1,Math.round((cy-rect.top)/ch-.5)))}
 }
+function setWireVisual(vis,a,b){
+ var A=wireCenter(a),B=wireCenter(b),d='M '+A.x+' '+A.y+' L '+B.x+' '+B.y;
+ vis.v.setAttribute('d',d);vis.hit.setAttribute('d',d);
+ vis.dotA.setAttribute('cx',A.x);vis.dotA.setAttribute('cy',A.y);
+ vis.dotB.setAttribute('cx',B.x);vis.dotB.setAttribute('cy',B.y);
+ if(vis.hA){vis.hA.setAttribute('cx',A.x);vis.hA.setAttribute('cy',A.y)}
+ if(vis.hB){vis.hB.setAttribute('cx',B.x);vis.hB.setAttribute('cy',B.y)}
+}
 function drawWires(){
  var wl=q('#wireLayer');wl.innerHTML='';
  st.wires.forEach(function(w){
    var A=wireCenter(w.a),B=wireCenter(w.b),sel=st.selected&&st.selected.kind==='wire'&&st.selected.id===w.id;
    var v=document.createElementNS('http://www.w3.org/2000/svg','path');v.setAttribute('class','wire'+(sel?' selected':''));v.setAttribute('d','M '+A.x+' '+A.y+' L '+B.x+' '+B.y);wl.appendChild(v);
-   var hit=document.createElementNS('http://www.w3.org/2000/svg','path');hit.setAttribute('class','wire-hit');hit.setAttribute('d','M '+A.x+' '+A.y+' L '+B.x+' '+B.y);bindWireDrag(hit,w);wl.appendChild(hit);
-   [A,B].forEach(function(P){var c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('class','wire-dot'+(sel?' selected':''));c.setAttribute('cx',P.x);c.setAttribute('cy',P.y);c.setAttribute('r','12');wl.appendChild(c)});
+   var hit=document.createElementNS('http://www.w3.org/2000/svg','path');hit.setAttribute('class','wire-hit');hit.setAttribute('d','M '+A.x+' '+A.y+' L '+B.x+' '+B.y);wl.appendChild(hit);
+   var dotA=document.createElementNS('http://www.w3.org/2000/svg','circle');dotA.setAttribute('class','wire-dot'+(sel?' selected':''));dotA.setAttribute('cx',A.x);dotA.setAttribute('cy',A.y);dotA.setAttribute('r','12');wl.appendChild(dotA);
+   var dotB=document.createElementNS('http://www.w3.org/2000/svg','circle');dotB.setAttribute('class','wire-dot'+(sel?' selected':''));dotB.setAttribute('cx',B.x);dotB.setAttribute('cy',B.y);dotB.setAttribute('r','12');wl.appendChild(dotB);
+   var hA=null,hB=null;
    if(sel){
-     [['a',A],['b',B]].forEach(function(it){var h=document.createElementNS('http://www.w3.org/2000/svg','circle');h.setAttribute('class','wire-handle');h.setAttribute('cx',it[1].x);h.setAttribute('cy',it[1].y);h.setAttribute('r','23');bindWireEndDrag(h,w,it[0]);wl.appendChild(h)})
+     hA=document.createElementNS('http://www.w3.org/2000/svg','circle');hA.setAttribute('class','wire-handle');hA.setAttribute('cx',A.x);hA.setAttribute('cy',A.y);hA.setAttribute('r','23');wl.appendChild(hA);
+     hB=document.createElementNS('http://www.w3.org/2000/svg','circle');hB.setAttribute('class','wire-handle');hB.setAttribute('cx',B.x);hB.setAttribute('cy',B.y);hB.setAttribute('r','23');wl.appendChild(hB);
    }
+   var vis={v:v,hit:hit,dotA:dotA,dotB:dotB,hA:hA,hB:hB};
+   bindWireDrag(hit,w,vis);
+   if(sel){bindWireEndDrag(hA,w,'a',vis);bindWireEndDrag(hB,w,'b',vis)}
  })
 }
-function bindWireDrag(el,w){
- var start=null,orig=null,pid=null,moved=false;
- el.addEventListener('pointerdown',function(e){e.stopPropagation();st.selected={kind:'wire',id:w.id};if(st.trayOpen){draw();return}pid=e.pointerId;start={x:e.clientX,y:e.clientY};orig={a:{x:w.a.x,y:w.a.y},b:{x:w.b.x,y:w.b.y}};moved=false;el.setPointerCapture(pid)});
- el.addEventListener('pointermove',function(e){if(pid!==e.pointerId||!start)return;var rect=q('#board').getBoundingClientRect(),dx=Math.round((e.clientX-start.x)/(rect.width/C)),dy=Math.round((e.clientY-start.y)/(rect.height/R));if(dx||dy)moved=true;var ax=orig.a.x+dx,ay=orig.a.y+dy,bx=orig.b.x+dx,by=orig.b.y+dy;if(ax<0||ax>=C||bx<0||bx>=C||ay<0||ay>=R||by<0||by>=R)return;w.a={x:ax,y:ay};w.b={x:bx,y:by};draw()});
- el.addEventListener('pointerup',function(e){if(pid!==e.pointerId)return;start=null;pid=null;st.selected={kind:'wire',id:w.id};q('#hint').textContent=moved?'점퍼선 이동 완료.':'점퍼선 선택됨.';draw()});
- el.addEventListener('pointercancel',function(){start=null;pid=null})
+function bindWireDrag(el,w,vis){
+ var start=null,orig=null,pid=null,moved=false,last=null;
+ el.addEventListener('pointerdown',function(e){
+   e.stopPropagation();st.selected={kind:'wire',id:w.id};
+   if(st.trayOpen){draw();return}
+   pid=e.pointerId;start={x:e.clientX,y:e.clientY};orig={a:{x:w.a.x,y:w.a.y},b:{x:w.b.x,y:w.b.y}};last=orig;moved=false;el.setPointerCapture(pid)
+ });
+ el.addEventListener('pointermove',function(e){
+   if(pid!==e.pointerId||!start)return;
+   var rect=q('#board').getBoundingClientRect(),dx=Math.round((e.clientX-start.x)/(rect.width/C)),dy=Math.round((e.clientY-start.y)/(rect.height/R));
+   if(dx||dy)moved=true;
+   var na={x:orig.a.x+dx,y:orig.a.y+dy},nb={x:orig.b.x+dx,y:orig.b.y+dy};
+   if(na.x<0||na.x>=C||nb.x<0||nb.x>=C||na.y<0||na.y>=R||nb.y<0||nb.y>=R)return;
+   last={a:na,b:nb};setWireVisual(vis,na,nb)
+ });
+ el.addEventListener('pointerup',function(e){
+   if(pid!==e.pointerId)return;
+   if(moved&&last){w.a=last.a;w.b=last.b}
+   start=null;pid=null;st.selected={kind:'wire',id:w.id};q('#hint').textContent=moved?'점퍼선 이동 완료.':'점퍼선 선택됨.';draw()
+ });
+ el.addEventListener('pointercancel',function(){start=null;pid=null;draw()})
 }
-function bindWireEndDrag(el,w,key){
- var pid=null;
- el.addEventListener('pointerdown',function(e){e.stopPropagation();pid=e.pointerId;el.setPointerCapture(pid)});
- el.addEventListener('pointermove',function(e){if(pid!==e.pointerId)return;w[key]=gridFromClient(e.clientX,e.clientY);draw()});
- el.addEventListener('pointerup',function(e){if(pid!==e.pointerId)return;pid=null;st.selected={kind:'wire',id:w.id};q('#hint').textContent='점퍼선 끝점 이동 완료.';draw()})
+function bindWireEndDrag(el,w,key,vis){
+ var pid=null,last=null;
+ el.addEventListener('pointerdown',function(e){e.stopPropagation();pid=e.pointerId;last={x:w[key].x,y:w[key].y};el.setPointerCapture(pid)});
+ el.addEventListener('pointermove',function(e){
+   if(pid!==e.pointerId)return;last=gridFromClient(e.clientX,e.clientY);
+   var a=key==='a'?last:w.a,b=key==='b'?last:w.b;setWireVisual(vis,a,b)
+ });
+ el.addEventListener('pointerup',function(e){
+   if(pid!==e.pointerId)return;if(last)w[key]=last;pid=null;st.selected={kind:'wire',id:w.id};q('#hint').textContent='점퍼선 끝점 이동 완료.';draw()
+ });
+ el.addEventListener('pointercancel',function(){pid=null;draw()})
 }
 
 function drawParts(ev){
