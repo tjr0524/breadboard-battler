@@ -89,3 +89,33 @@ header{display:flex;justify-content:space-between;align-items:center;margin-bott
 .part-state.state-warn{background:#aa7818}
 .part-state.state-partial{background:#4775a7}
 .part-state.state-bad{background:#b94444}
+
+
+/* node-voltage visualization: voltage belongs to the five-hole node, not the jumper */
+.node-label-layer{
+  position:absolute;inset:0;z-index:2;pointer-events:none;
+}
+.node-voltage{
+  position:absolute;transform:translateY(-50%);
+  font-size:7px;font-weight:1000;line-height:1;
+  color:#111;background:rgba(255,255,255,.78);
+  border:1px solid rgba(20,20,20,.25);
+  border-radius:5px;padding:2px 3px;
+  box-shadow:0 1px 3px rgba(0,0,0,.18);
+  white-space:nowrap;
+}
+.node-voltage.left{left:1px}
+.node-voltage.right{right:1px}
+.cell.voltage-live{
+  transition:background .12s ease;
+}
+.cell.voltage-live:after{
+  opacity:1;
+  transition:background .12s ease,box-shadow .12s ease;
+}
+
+.cell.voltage-live:after{
+  background:var(--hole-voltage-color,#6f695b)!important;
+  box-shadow:inset 0 0 0 2px rgba(35,35,35,.45),0 0 5px var(--hole-voltage-color,#6f695b)!important;
+}
+.wire.net-plus,.wire.net-minus,.wire.net-both{stroke:#f1c84e}
