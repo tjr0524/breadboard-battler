@@ -253,8 +253,12 @@ CircuitEngine.prototype._solve=function(dt){
             if(!allow) next='off';
             else if(-cur>lim+1e-8) next='cc-';
           }
-        } else {
-          next='cv';
+        } else if(old==='cc+'){
+          next=vd<sv-1e-6?'cc+':'cv';
+        } else if(old==='cc-'){
+          next=vd>sv+1e-6?'cc-':'cv';
+        } else if(old==='off'){
+          next=vd>sv-1e-6?'off':'cv';
         }
         if(next!==old){modes[d.id]=next;changed=true;}
       }
