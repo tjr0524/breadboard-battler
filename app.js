@@ -1,6 +1,8 @@
 
 (function(){
-var C=10,R=12,nextPart=1,nextWire=1,SOURCE_PLUS='10:L',SOURCE_MINUS='11:L';
+var C=10,R=12,nextPart=1,nextWire=1,SOURCE_PLUS='RAIL_L_PLUS',SOURCE_MINUS='RAIL_L_GND';
+var MAIN_X0=15,MAIN_W=70,CELL_W=MAIN_W/C;
+var RAIL_X={ '-2':4.5, '-1':9.5, '10':90.5, '11':95.5 };
 var defs={
  resistor:{n:'저항',s:'R',w:1,h:3,d:'전압 조절용',polar:false},
  cap:{n:'캐패시터',s:'CAP',w:1,h:2,d:'순간전력 저장',polar:true},
@@ -12,7 +14,24 @@ var defs={
 var st={mode:'edit',wireStart:null,parts:[],wires:[],credits:100,stage:1,busy:false,trayOpen:true,inv:{resistor:3,cap:2,battery:1,gun:2,pulse:1,repair:1},drag:null,preview:null,selected:null};
 
 function q(s){return document.querySelector(s)}
-function nodeOf(x,y){return y+':'+(x<5?'L':'R')}
+function nodeOf(x,y){
+ if(x===-2)return 'RAIL_L_PLUS';
+ if(x===-1)return 'RAIL_L_GND';
+ if(x===10)return 'RAIL_R_GND';
+ if(x===11)return 'RAIL_R_PLUS';
+ return y+':'+(x<5?'L':'R')
+}
+function mainLeftPct(x){return MAIN_X0+x*CELL_W}
+function mainWidthPct(w){return w*CELL_W}
+function laneCenterPct(x){
+ if(RAIL_X[String(x)]!=null)return RAIL_X[String(x)];
+ return MAIN_X0+(x+.5)*CELL_W
+}
+function xCodeFromPct(p){
+ var codes=[-2,-1,0,1,2,3,4,5,6,7,8,9,10,11],best=codes[0],dist=1e9;
+ codes.forEach(function(x){var d=Math.abs(laneCenterPct(x)-p);if(d<dist){dist=d;best=x}});
+ return best
+}
 function dims(t,r){var d=defs[t];return r?{w:d.h,h:d.w}:{w:d.w,h:d.h}}
 function hit(p,x,y){var d=dims(p.t,p.r);return x>=p.x&&x<p.x+d.w&&y>=p.y&&y<p.y+d.h}
 function terminals(p){
@@ -39,7 +58,7 @@ function buildNetMap(){
  function find(n){n=add(n);var r=n;while(parent[r]!==r)r=parent[r];while(parent[n]!==n){var p=parent[n];parent[n]=r;n=p}return r}
  function union(a,b){a=find(a);b=find(b);if(a!==b)parent[b]=a}
  for(var y=0;y<R;y++){add(y+':L');add(y+':R')}
- add(SOURCE_PLUS);add(SOURCE_MINUS);
+ add(SOURCE_PLUS);add(SOURCE_MINUS);add('RAIL_R_GND');add('RAIL_R_PLUS');
  st.parts.forEach(function(p){var n=partNodes(p);add(n.plus);add(n.minus)});
  st.wires.forEach(function(w){union(nodeOf(w.a.x,w.a.y),nodeOf(w.b.x,w.b.y))});
  Object.keys(parent).forEach(find);
@@ -102,6 +121,21 @@ function calc(){
  var core=result.branches.core||{status:'off',current:0};
  if(core.status==='cc+')warn.push('CORE가 '+core.current.toFixed(1)+'A 전류 제한 상태입니다');
 
+ var refAdj={};
+ function refEdge(a,b){
+   a=net.find(a);b=net.find(b);
+   if(a===b)return;
+   (refAdj[a]||(refAdj[a]=[])).push(b);
+   (refAdj[b]||(refAdj[b]=[])).push(a)
+ }
+ refEdge(plus,ground);
+ st.parts.forEach(function(p){var pn=partNodes(p);refEdge(pn.plus,pn.minus)});
+ var referenced={},rq=[ground];
+ while(rq.length){
+   var rn=rq.shift();if(referenced[rn])continue;referenced[rn]=1;
+   (refAdj[rn]||[]).forEach(function(nn){if(!referenced[nn])rq.push(nn)})
+ }
+
  var pos={},neg={},short=plus===ground;
  for(var y=0;y<R;y++)['L','R'].forEach(function(side){
    var raw=y+':'+side,root=net.find(raw),v=result.voltages[root]||0;
@@ -111,13 +145,14 @@ function calc(){
 
  return{
    pos:pos,neg:neg,s:2.5+batteries*.8,n:need,d:dps,h:heal,w:warn,cap:Object.keys(capPairs).length,
-   short:short,parts:parts,engine:eng,result:result,net:net,core:core
+   short:short,parts:parts,engine:eng,result:result,net:net,core:core,referenced:referenced
  }
 }
 
 function partStatus(p,ev){
  var pr=ev.parts&&ev.parts[p.id];
  if(!pr)return{text:'OFF',cls:'state-off'};
+ if(ev.referenced&&!ev.referenced[pr.a]&&!ev.referenced[pr.b])return{text:'FLOAT',cls:'state-off'};
  if(pr.same)return{text:'ERR',cls:'state-bad'};
  if(pr.reversed)return{text:'REV',cls:'state-bad'};
  var v=pr.voltage||0,i=pr.current||0;
@@ -166,9 +201,37 @@ function voltageText(v){
 }
 
 function makeBoard(){
- var sl=q('#stripLayer'),grid=q('#grid');
- for(var y=0;y<R;y++)['L','R'].forEach(function(side){var line=document.createElement('div');line.className='strip-line';if(y===10&&side==='L')line.classList.add('core-plus');if(y===11&&side==='L')line.classList.add('core-minus');line.style.top=((y+.5)*100/R)+'%';line.style.left=side==='L'?'4.8%':'54.8%';line.style.width='40.4%';sl.appendChild(line)});
- for(var i=0;i<C*R;i++){var c=document.createElement('div'),x=i%C,y=Math.floor(i/C);c.className='cell';c.dataset.x=x;c.dataset.y=y;if(y===10&&x<5)c.classList.add('core-plus');if(y===11&&x<5)c.classList.add('core-minus');c.addEventListener('click',tapHole);grid.appendChild(c)}
+ var sl=q('#stripLayer'),grid=q('#grid'),rails=q('#railLayer');
+ sl.innerHTML='';grid.innerHTML='';rails.innerHTML='';
+
+ for(var y=0;y<R;y++){
+   ['L','R'].forEach(function(side){
+     var line=document.createElement('div');line.className='strip-line';
+     line.style.top=((y+.5)*100/R)+'%';
+     line.style.left=(side==='L'?(MAIN_X0+.5*CELL_W):(MAIN_X0+5.5*CELL_W))+'%';
+     line.style.width=(4*CELL_W)+'%';
+     sl.appendChild(line)
+   })
+ }
+
+ [
+   {x:-2,label:'+',kind:'plus'},
+   {x:-1,label:'−',kind:'gnd'},
+   {x:10,label:'−',kind:'gnd'},
+   {x:11,label:'+',kind:'plus'}
+ ].forEach(function(r){
+   var line=document.createElement('div');line.className='rail-line';line.dataset.x=r.x;line.style.left=laneCenterPct(r.x)+'%';rails.appendChild(line);
+   var mark=document.createElement('span');mark.className='rail-mark';mark.textContent=r.label;mark.style.left=laneCenterPct(r.x)+'%';rails.appendChild(mark);
+   for(var yy=0;yy<R;yy++){
+     var h=document.createElement('button');h.type='button';h.className='rail-hole';h.dataset.x=r.x;h.dataset.y=yy;
+     h.style.left=laneCenterPct(r.x)+'%';h.style.top=((yy+.5)*100/R)+'%';h.addEventListener('click',tapHole);rails.appendChild(h)
+   }
+ });
+
+ for(var i=0;i<C*R;i++){
+   var c=document.createElement('div'),x=i%C,y=Math.floor(i/C);c.className='cell';c.dataset.x=x;c.dataset.y=y;
+   c.addEventListener('click',tapHole);grid.appendChild(c)
+ }
 }
 function tapHole(e){
  if(st.busy||st.drag)return;var x=+e.currentTarget.dataset.x,y=+e.currentTarget.dataset.y;
@@ -181,10 +244,11 @@ function tapHole(e){
  }
  draw()
 }
-function wireCenter(h){return{x:(h.x+.5)*100,y:(h.y+.5)*100}}
+function wireCenter(h){return{x:laneCenterPct(h.x)*10,y:(h.y+.5)*100}}
 function gridFromClient(cx,cy){
- var rect=q('#board').getBoundingClientRect(),cw=rect.width/C,ch=rect.height/R;
- return{x:Math.max(0,Math.min(C-1,Math.round((cx-rect.left)/cw-.5))),y:Math.max(0,Math.min(R-1,Math.round((cy-rect.top)/ch-.5)))}
+ var rect=q('#board').getBoundingClientRect(),xp=(cx-rect.left)/rect.width*100;
+ var x=xCodeFromPct(xp),y=Math.max(0,Math.min(R-1,Math.round((cy-rect.top)/(rect.height/R)-.5)));
+ return{x:x,y:y}
 }
 function setWireVisual(vis,a,b){
  var A=wireCenter(a),B=wireCenter(b),d='M '+A.x+' '+A.y+' L '+B.x+' '+B.y;
@@ -221,11 +285,13 @@ function bindWireDrag(el,w,vis){
  });
  el.addEventListener('pointermove',function(e){
    if(pid!==e.pointerId||!start)return;
-   var rect=q('#board').getBoundingClientRect(),dx=Math.round((e.clientX-start.x)/(rect.width/C)),dy=Math.round((e.clientY-start.y)/(rect.height/R));
-   if(dx||dy)moved=true;
-   var na={x:orig.a.x+dx,y:orig.a.y+dy},nb={x:orig.b.x+dx,y:orig.b.y+dy};
-   if(na.x<0||na.x>=C||nb.x<0||nb.x>=C||na.y<0||na.y>=R||nb.y<0||nb.y>=R)return;
-   last={a:na,b:nb};setWireVisual(vis,na,nb)
+   var rect=q('#board').getBoundingClientRect(),dx=(e.clientX-start.x)/rect.width*100,dy=(e.clientY-start.y)/rect.height*R;
+   if(Math.abs(dx)>0.4||Math.abs(dy)>.15)moved=true;
+   function shifted(h){
+     var xp=laneCenterPct(h.x)+dx,yy=Math.round(h.y+dy);
+     return{x:xCodeFromPct(xp),y:Math.max(0,Math.min(R-1,yy))}
+   }
+   var na=shifted(orig.a),nb=shifted(orig.b);last={a:na,b:nb};setWireVisual(vis,na,nb)
  });
  el.addEventListener('pointerup',function(e){
    if(pid!==e.pointerId)return;
@@ -253,7 +319,7 @@ function drawParts(ev){
    var d=dims(p.t,p.r),sel=st.selected&&st.selected.kind==='part'&&st.selected.id===p.id;
    var b=document.createElement('div');b.className='part '+p.t+(sel?' selected':'');
    var ps=partStatus(p,ev);if(ps.cls==='state-on')b.classList.add('powered');if(ps.cls==='state-bad')b.classList.add('bad');
-   b.style.left=(p.x*10)+'%';b.style.top=(p.y*100/R)+'%';b.style.width=(d.w*10)+'%';b.style.height=(d.h*100/R)+'%';
+   b.style.left=mainLeftPct(p.x)+'%';b.style.top=(p.y*100/R)+'%';b.style.width=mainWidthPct(d.w)+'%';b.style.height=(d.h*100/R)+'%';
    b.innerHTML=defs[p.t].s+'<small>'+defs[p.t].n+'</small>';
    var badge=document.createElement('span');badge.className='part-state '+ps.cls;badge.textContent=ps.text;b.appendChild(badge);
    terminals(p).forEach(function(t){var dot=document.createElement('i');dot.className='pin '+t.role;dot.style.left=((t.x-p.x+.5)/d.w*100)+'%';dot.style.top=((t.y-p.y+.5)/d.h*100)+'%';b.appendChild(dot)});
@@ -268,34 +334,32 @@ function bindPlacedPart(el,p){
  el.addEventListener('pointercancel',function(){finishDrag();pid=null;start=null;draw()})
 }
 function updateBoardPartDrag(cx,cy,p){
- var rect=q('#board').getBoundingClientRect(),d=dims(p.t,p.r),cw=rect.width/C,ch=rect.height/R,x=Math.round((cx-rect.left)/cw-d.w/2),y=Math.round((cy-rect.top)/ch-d.h/2);
- x=Math.max(0,Math.min(C-d.w,x));y=Math.max(0,Math.min(R-d.h,y));var valid=canPlace(p.t,x,y,p.r,p.id);st.preview={x:x,y:y,valid:valid};showPreview(p.t,p.r,x,y,valid)
+ var rect=q('#board').getBoundingClientRect(),d=dims(p.t,p.r);
+ var mainLeft=rect.left+rect.width*MAIN_X0/100,mainWidth=rect.width*MAIN_W/100,cw=mainWidth/C,ch=rect.height/R;
+ var x=Math.round((cx-mainLeft)/cw-d.w/2),y=Math.round((cy-rect.top)/ch-d.h/2);
+ x=Math.max(0,Math.min(C-d.w,x));y=Math.max(0,Math.min(R-d.h,y));
+ var valid=canPlace(p.t,x,y,p.r,p.id);st.preview={x:x,y:y,valid:valid};showPreview(p.t,p.r,x,y,valid)
 }
 
 function drawGrid(ev){
- var labels=q('#nodeLabelLayer');labels.innerHTML='';
- var shown={};
+ var labels=q('#nodeLabelLayer');labels.innerHTML='';var shown={};
 
  document.querySelectorAll('.cell').forEach(function(c){
    c.classList.remove('same-node','wire-start','net-plus','net-minus','net-both','voltage-live');
-   c.style.background='';
-   var x=+c.dataset.x,y=+c.dataset.y,raw=nodeOf(x,y);
-   var root=ev.net&&ev.net.find?ev.net.find(raw):raw;
+   c.style.background='';c.style.boxShadow='';c.style.removeProperty('--hole-voltage-color');
+   var x=+c.dataset.x,y=+c.dataset.y,raw=nodeOf(x,y),root=ev.net&&ev.net.find?ev.net.find(raw):raw;
+   var ref=!!(ev.referenced&&ev.referenced[root]);
    var v=ev.result&&ev.result.voltages?+(ev.result.voltages[root]||0):0;
 
-   c.classList.add('voltage-live');
-   c.style.background=voltageColor(v)+'22';
-   c.style.setProperty('--node-color',voltageColor(v));
-   c.style.boxShadow='inset 0 0 0 1px '+voltageColor(v)+'33';
-
-   if(!shown[raw]){
-     shown[raw]=1;
-     var lab=document.createElement('span');
-     lab.className='node-voltage '+(x<5?'left':'right');
-     lab.style.top=((y+.5)*100/R)+'%';
-     lab.style.borderColor=voltageColor(v);
-     lab.textContent=voltageText(v);
-     labels.appendChild(lab)
+   if(ref){
+     c.classList.add('voltage-live');c.style.background=voltageColor(v)+'22';
+     c.style.boxShadow='inset 0 0 0 1px '+voltageColor(v)+'33';
+     c.style.setProperty('--hole-voltage-color',voltageColor(v));
+     if(!shown[raw]){
+       shown[raw]=1;var lab=document.createElement('span');
+       lab.className='node-voltage '+(x<5?'left':'right');lab.style.top=((y+.5)*100/R)+'%';
+       lab.style.borderColor=voltageColor(v);lab.textContent=voltageText(v);labels.appendChild(lab)
+     }
    }
 
    if(st.wireStart){
@@ -304,15 +368,19 @@ function drawGrid(ev){
    }
  });
 
- // Hole color follows the electrical node voltage.
- document.querySelectorAll('.cell').forEach(function(c){
-   var x=+c.dataset.x,y=+c.dataset.y,raw=nodeOf(x,y);
-   var root=ev.net&&ev.net.find?ev.net.find(raw):raw;
-   var v=ev.result&&ev.result.voltages?+(ev.result.voltages[root]||0):0;
-   c.style.setProperty('--hole-voltage-color',voltageColor(v));
+ document.querySelectorAll('.rail-line').forEach(function(line){
+   var x=+line.dataset.x,raw=nodeOf(x,0),root=ev.net&&ev.net.find?ev.net.find(raw):raw;
+   var ref=!!(ev.referenced&&ev.referenced[root]),v=ev.result&&ev.result.voltages?+(ev.result.voltages[root]||0):0;
+   line.classList.toggle('live',ref);line.style.color=ref?voltageColor(v):'';line.style.background=ref?voltageColor(v):''
+ });
+ document.querySelectorAll('.rail-hole').forEach(function(h){
+   h.classList.remove('live','wire-start');h.style.removeProperty('--rail-color');
+   var x=+h.dataset.x,y=+h.dataset.y,raw=nodeOf(x,y),root=ev.net&&ev.net.find?ev.net.find(raw):raw;
+   var ref=!!(ev.referenced&&ev.referenced[root]),v=ev.result&&ev.result.voltages?+(ev.result.voltages[root]||0):0;
+   if(ref){h.classList.add('live');h.style.setProperty('--rail-color',voltageColor(v))}
+   if(st.wireStart&&x===st.wireStart.x&&y===st.wireStart.y)h.classList.add('wire-start')
  })
 }
-
 function miniShape(t){var d=defs[t],scale=Math.min(27/d.w,27/d.h);return '<div class="mini-shape" data-part="'+t+'"><div class="mini-body '+t+'" style="width:'+Math.max(8,d.w*scale)+'px;height:'+Math.max(8,d.h*scale)+'px"></div></div>'}
 function palette(){
  var p=q('#palette');p.innerHTML='';
@@ -326,11 +394,17 @@ function bindTrayDrag(el,t){
  el.addEventListener('pointercancel',function(){finishDrag();pid=null;draw()})
 }
 function updateTrayDrag(cx,cy){
- if(!st.drag)return;var rect=q('#board').getBoundingClientRect(),t=st.drag.t,d=dims(t,st.drag.r),inside=cx>=rect.left&&cx<=rect.right&&cy>=rect.top&&cy<=rect.bottom;
+ if(!st.drag)return;
+ var rect=q('#board').getBoundingClientRect(),t=st.drag.t,d=dims(t,st.drag.r);
+ var mainLeft=rect.left+rect.width*MAIN_X0/100,mainRight=rect.left+rect.width*(MAIN_X0+MAIN_W)/100;
+ var inside=cx>=mainLeft&&cx<=mainRight&&cy>=rect.top&&cy<=rect.bottom;
  if(!inside){st.preview=null;q('#dropPreview').classList.remove('show','invalid');return}
- var cw=rect.width/C,ch=rect.height/R,x=Math.round((cx-rect.left)/cw-d.w/2),y=Math.round((cy-rect.top)/ch-d.h/2);x=Math.max(0,Math.min(C-d.w,x));y=Math.max(0,Math.min(R-d.h,y));var valid=canPlace(t,x,y,st.drag.r,null);st.preview={x:x,y:y,valid:valid};showPreview(t,st.drag.r,x,y,valid)
+ var cw=(rect.width*MAIN_W/100)/C,ch=rect.height/R;
+ var x=Math.round((cx-mainLeft)/cw-d.w/2),y=Math.round((cy-rect.top)/ch-d.h/2);
+ x=Math.max(0,Math.min(C-d.w,x));y=Math.max(0,Math.min(R-d.h,y));
+ var valid=canPlace(t,x,y,st.drag.r,null);st.preview={x:x,y:y,valid:valid};showPreview(t,st.drag.r,x,y,valid)
 }
-function showPreview(t,r,x,y,valid){var d=dims(t,r),pv=q('#dropPreview');pv.classList.add('show');pv.classList.toggle('invalid',!valid);pv.style.left=(x*10)+'%';pv.style.top=(y*100/R)+'%';pv.style.width=(d.w*10)+'%';pv.style.height=(d.h*100/R)+'%';pv.innerHTML='<span>'+defs[t].s+'</span>'}
+function showPreview(t,r,x,y,valid){var d=dims(t,r),pv=q('#dropPreview');pv.classList.add('show');pv.classList.toggle('invalid',!valid);pv.style.left=mainLeftPct(x)+'%';pv.style.top=(y*100/R)+'%';pv.style.width=mainWidthPct(d.w)+'%';pv.style.height=(d.h*100/R)+'%';pv.innerHTML='<span>'+defs[t].s+'</span>'}
 function finishDrag(){q('#dragGhost').classList.remove('show');q('#dropPreview').classList.remove('show','invalid');q('#trayShell').classList.remove('auto-hide');st.drag=null;st.preview=null}
 
 function setTray(open){st.trayOpen=open;q('#trayShell').classList.toggle('closed',!open);q('#trayToggleText').textContent=open?'부품 트레이 닫기':'부품 트레이 열기';q('#trayArrow').textContent=open?'▼':'▲';if(open)st.selected=null;drawSelectionTools()}
@@ -339,7 +413,7 @@ function selectedWire(){return st.selected&&st.selected.kind==='wire'?st.wires.f
 function drawSelectionTools(){
  var box=q('#selectionTools'),part=selectedPart(),wire=selectedWire();if(!part&&!wire){box.classList.remove('show');return}
  var x,y;
- if(part){var d=dims(part.t,part.r);x=(part.x+d.w/2)*10;y=(part.y)*100/R;q('#selRotate').disabled=false}
+ if(part){var d=dims(part.t,part.r);x=mainLeftPct(part.x)+mainWidthPct(d.w)/2;y=(part.y)*100/R;q('#selRotate').disabled=false}
  else{var A=wireCenter(wire.a),B=wireCenter(wire.b);x=(A.x+B.x)/20;y=(A.y+B.y)/24;q('#selRotate').disabled=true}
  x=Math.max(10,Math.min(90,x));y=Math.max(10,Math.min(96,y));box.style.left=x+'%';box.style.top=y+'%';box.classList.add('show')
 }
@@ -371,11 +445,11 @@ q('#reco').onclick=function(){
  var need={gun:1,cap:1,pulse:1,repair:1,battery:1};for(var k in need)if(st.inv[k]<need[k])return;
  var bat=add('battery',0,3,0),gun=add('gun',2,6,0),cap=add('cap',5,3,0),pulse=add('pulse',6,6,0),fix=add('repair',6,0,0);
  function W(ax,ay,bx,by){st.wires.push({id:nextWire++,a:{x:ax,y:ay},b:{x:bx,y:by}})}
- /* + rail to distinct + nodes */
- W(0,10,0,3); W(0,10,2,6); W(0,10,5,3); W(0,10,6,6); W(0,10,6,0);
- /* GND rail to distinct - nodes */
- W(0,11,1,5); W(0,11,3,7); W(0,11,5,4); W(0,11,8,7); W(0,11,7,1);
- st.mode='edit';st.selected=null;setTray(false);q('#hint').innerHTML='<b>추천 회로.</b> +12V와 GND를 서로 다른 노드로 분리한 정상 예시입니다.';draw()
+ /* left vertical + rail -> component + terminals */
+ W(-2,3,0,3); W(-2,6,2,6); W(-2,3,5,3); W(-2,6,6,6); W(-2,0,6,0);
+ /* left vertical GND rail -> component - terminals */
+ W(-1,5,1,5); W(-1,7,3,7); W(-1,4,5,4); W(-1,7,8,7); W(-1,1,7,1);
+ st.mode='edit';st.selected=null;setTray(false);q('#hint').innerHTML='<b>추천 회로.</b> 왼쪽 세로 +12V/GND rail에서 각 부품으로 전원을 분배합니다.';draw()
 };
 
 q('#check').onclick=function(){var e=calc();q('#hint').innerHTML=e.w.length?'<b>경고:</b> '+e.w[0]:'<b>정상.</b> '+e.d.toFixed(0)+' DPS · 회복 '+e.h.toFixed(1)+'/s · CAP '+e.cap+'개'};
