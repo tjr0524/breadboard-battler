@@ -50,6 +50,37 @@ function calc(){
  return{pos:pos,neg:neg,s:supply,n:need,d:dps*f,h:heal*f,w:warn,cap:capReady,short:hardShort}
 }
 
+
+function partStatus(p,ev){
+ var n=partNodes(p),same=n.plus===n.minus,hasPlus=!!ev.pos[n.plus],hasGnd=!!ev.neg[n.minus];
+ var rev=!!ev.pos[n.minus]&&!!ev.neg[n.plus],on=hasPlus&&hasGnd;
+ if(same)return{text:'ERR',cls:'state-bad'};
+ if(rev)return{text:'REV',cls:'state-bad'};
+
+ if(p.t==='resistor'){
+   var tt=terminals(p),na=nodeOf(tt[0].x,tt[0].y),nb=nodeOf(tt[1].x,tt[1].y);
+   var touched=!!ev.pos[na]||!!ev.pos[nb]||!!ev.neg[na]||!!ev.neg[nb];
+   return touched?{text:'LINK',cls:'state-warn'}:{text:'OFF',cls:'state-off'}
+ }
+ if(p.t==='cap'){
+   if(on)return{text:'CHG',cls:'state-on'};
+   if(hasPlus)return{text:'+만',cls:'state-partial'};
+   if(hasGnd)return{text:'GND만',cls:'state-partial'};
+   return{text:'OFF',cls:'state-off'}
+ }
+ if(p.t==='battery'){
+   if(on)return{text:'BUF',cls:'state-on'};
+   if(hasPlus)return{text:'+만',cls:'state-partial'};
+   if(hasGnd)return{text:'GND만',cls:'state-partial'};
+   return{text:'OFF',cls:'state-off'}
+ }
+ if(p.t==='pulse'&&on&&!ev.cap)return{text:'CAP?',cls:'state-warn'};
+ if(on)return{text:'ON',cls:'state-on'};
+ if(hasPlus)return{text:'+만',cls:'state-partial'};
+ if(hasGnd)return{text:'GND만',cls:'state-partial'};
+ return{text:'OFF',cls:'state-off'}
+}
+
 function makeBoard(){
  var sl=q('#stripLayer'),grid=q('#grid');
  for(var y=0;y<R;y++)['L','R'].forEach(function(side){var line=document.createElement('div');line.className='strip-line';if(y===10&&side==='L')line.classList.add('core-plus');if(y===11&&side==='L')line.classList.add('core-minus');line.style.top=((y+.5)*100/R)+'%';line.style.left=side==='L'?'4.8%':'54.8%';line.style.width='40.4%';sl.appendChild(line)});
@@ -79,11 +110,11 @@ function setWireVisual(vis,a,b){
  if(vis.hA){vis.hA.setAttribute('cx',A.x);vis.hA.setAttribute('cy',A.y)}
  if(vis.hB){vis.hB.setAttribute('cx',B.x);vis.hB.setAttribute('cy',B.y)}
 }
-function drawWires(){
+function drawWires(ev){
  var wl=q('#wireLayer');wl.innerHTML='';
  st.wires.forEach(function(w){
-   var A=wireCenter(w.a),B=wireCenter(w.b),sel=st.selected&&st.selected.kind==='wire'&&st.selected.id===w.id;
-   var v=document.createElementNS('http://www.w3.org/2000/svg','path');v.setAttribute('class','wire'+(sel?' selected':''));v.setAttribute('d','M '+A.x+' '+A.y+' L '+B.x+' '+B.y);wl.appendChild(v);
+   var A=wireCenter(w.a),B=wireCenter(w.b),sel=st.selected&&st.selected.kind==='wire'&&st.selected.id===w.id;var na=nodeOf(w.a.x,w.a.y),nb=nodeOf(w.b.x,w.b.y),wp=!!ev.pos[na]&&!!ev.pos[nb],wg=!!ev.neg[na]&&!!ev.neg[nb],netCls=wp&&wg?' net-both':wp?' net-plus':wg?' net-minus':'';
+   var v=document.createElementNS('http://www.w3.org/2000/svg','path');v.setAttribute('class','wire'+netCls+(sel?' selected':''));v.setAttribute('d','M '+A.x+' '+A.y+' L '+B.x+' '+B.y);wl.appendChild(v);
    var hit=document.createElementNS('http://www.w3.org/2000/svg','path');hit.setAttribute('class','wire-hit');hit.setAttribute('d','M '+A.x+' '+A.y+' L '+B.x+' '+B.y);wl.appendChild(hit);
    var dotA=document.createElementNS('http://www.w3.org/2000/svg','circle');dotA.setAttribute('class','wire-dot'+(sel?' selected':''));dotA.setAttribute('cx',A.x);dotA.setAttribute('cy',A.y);dotA.setAttribute('r','12');wl.appendChild(dotA);
    var dotB=document.createElementNS('http://www.w3.org/2000/svg','circle');dotB.setAttribute('class','wire-dot'+(sel?' selected':''));dotB.setAttribute('cx',B.x);dotB.setAttribute('cy',B.y);dotB.setAttribute('r','12');wl.appendChild(dotB);
@@ -138,7 +169,7 @@ function drawParts(ev){
    var d=dims(p.t,p.r),nodes=partNodes(p),sel=st.selected&&st.selected.kind==='part'&&st.selected.id===p.id;
    var b=document.createElement('div');b.className='part '+p.t+(sel?' selected':'');
    var powered=ev.pos[nodes.plus]&&ev.neg[nodes.minus],reversed=ev.pos[nodes.minus]&&ev.neg[nodes.plus];if(powered)b.classList.add('powered');if(reversed||nodes.plus===nodes.minus)b.classList.add('bad');
-   b.style.left=(p.x*10)+'%';b.style.top=(p.y*100/R)+'%';b.style.width=(d.w*10)+'%';b.style.height=(d.h*100/R)+'%';b.innerHTML=defs[p.t].s+'<small>'+defs[p.t].n+'</small>';
+   b.style.left=(p.x*10)+'%';b.style.top=(p.y*100/R)+'%';b.style.width=(d.w*10)+'%';b.style.height=(d.h*100/R)+'%';b.innerHTML=defs[p.t].s+'<small>'+defs[p.t].n+'</small>';var ps=partStatus(p,ev),badge=document.createElement('span');badge.className='part-state '+ps.cls;badge.textContent=ps.text;b.appendChild(badge);
    terminals(p).forEach(function(t){var dot=document.createElement('i');dot.className='pin '+t.role;dot.style.left=((t.x-p.x+.5)/d.w*100)+'%';dot.style.top=((t.y-p.y+.5)/d.h*100)+'%';b.appendChild(dot)});
    bindPlacedPart(b,p);pl.appendChild(b)
  })
@@ -155,7 +186,17 @@ function updateBoardPartDrag(cx,cy,p){
  x=Math.max(0,Math.min(C-d.w,x));y=Math.max(0,Math.min(R-d.h,y));var valid=canPlace(p.t,x,y,p.r,p.id);st.preview={x:x,y:y,valid:valid};showPreview(p.t,p.r,x,y,valid)
 }
 
-function drawGrid(){document.querySelectorAll('.cell').forEach(function(c){c.classList.remove('same-node','wire-start');if(st.wireStart){var x=+c.dataset.x,y=+c.dataset.y;if(nodeOf(x,y)===nodeOf(st.wireStart.x,st.wireStart.y))c.classList.add('same-node');if(x===st.wireStart.x&&y===st.wireStart.y)c.classList.add('wire-start')}})}
+function drawGrid(ev){
+ document.querySelectorAll('.cell').forEach(function(c){
+   c.classList.remove('same-node','wire-start','net-plus','net-minus','net-both');
+   var x=+c.dataset.x,y=+c.dataset.y,n=nodeOf(x,y),p=!!ev.pos[n],g=!!ev.neg[n];
+   if(p&&g)c.classList.add('net-both');else if(p)c.classList.add('net-plus');else if(g)c.classList.add('net-minus');
+   if(st.wireStart){
+     if(n===nodeOf(st.wireStart.x,st.wireStart.y))c.classList.add('same-node');
+     if(x===st.wireStart.x&&y===st.wireStart.y)c.classList.add('wire-start')
+   }
+ })
+}
 function miniShape(t){var d=defs[t],scale=Math.min(27/d.w,27/d.h);return '<div class="mini-shape" data-part="'+t+'"><div class="mini-body '+t+'" style="width:'+Math.max(8,d.w*scale)+'px;height:'+Math.max(8,d.h*scale)+'px"></div></div>'}
 function palette(){
  var p=q('#palette');p.innerHTML='';
@@ -197,7 +238,7 @@ function deleteSelected(){
 }
 
 function draw(){
- var ev=calc();drawParts(ev);drawWires();drawGrid();palette();drawSelectionTools();q('#wire').classList.toggle('on',st.mode==='wire');
+ var ev=calc();drawParts(ev);drawWires(ev);drawGrid(ev);palette();drawSelectionTools();q('#wire').classList.toggle('on',st.mode==='wire');
  q('#amps').textContent=ev.n.toFixed(1)+'/'+ev.s.toFixed(1)+'A';q('#dps').textContent=ev.d.toFixed(0);q('#heal').textContent=ev.h.toFixed(1);
  var used=0;st.parts.forEach(function(p){var d=dims(p.t,p.r);used+=d.w*d.h});q('#space').textContent=Math.round(used/C/R*100)+'%';q('#fight').disabled=st.busy||ev.d<=0||ev.short
 }
