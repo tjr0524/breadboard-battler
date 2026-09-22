@@ -4,29 +4,51 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Breadboard Battler</title>
-<link rel="stylesheet" href="./style.css?v=0.0.2-test2">
+<link rel="stylesheet" href="./style.css?v=0.0.3-test3">
 </head>
 <body>
 <div id="app">
 <header>
-  <div><div class="title">Breadboard Battler</div><div class="ver">TEST v0.0.2-test2 · strip-connected breadboard</div></div>
+  <div>
+    <div class="title">Breadboard Battler</div>
+    <div class="ver">TEST v0.0.3-test3 · drag tray + explicit ± power</div>
+  </div>
   <div class="credits">CR <b id="credits">100</b></div>
 </header>
 
 <div class="card battle">
-  <div><b>CORE · S<span id="stage">1</span></b><div class="bar"><div class="fill" id="pbar"></div></div><div class="mini">HP <span id="php">100</span> · 회복 <span id="heal">0</span>/s</div></div>
+  <div>
+    <b>CORE · S<span id="stage">1</span></b>
+    <div class="bar"><div class="fill" id="pbar"></div></div>
+    <div class="mini">HP <span id="php">100</span> · 회복 <span id="heal">0</span>/s</div>
+  </div>
   <div class="vs">AUTO<br>VS</div>
-  <div class="enemy"><b>SCRAP DRONE</b><div class="bar"><div class="fill" id="ebar"></div></div><div class="mini">HP <span id="ehp">180</span> · 재생 1.2/s</div></div>
+  <div class="enemy">
+    <b>SCRAP DRONE</b>
+    <div class="bar"><div class="fill" id="ebar"></div></div>
+    <div class="mini">HP <span id="ehp">180</span> · 재생 1.2/s</div>
+  </div>
 </div>
 
 <div class="card"><div class="stats">
-  <div class="stat"><strong>12V</strong><span>CORE BUS</span></div>
-  <div class="stat"><strong id="amps">0/2.5A</strong><span>전류</span></div>
+  <div class="stat"><strong>12V</strong><span>CORE 발전기</span></div>
+  <div class="stat"><strong id="amps">0/2.5A</strong><span>요구/공급</span></div>
   <div class="stat"><strong id="dps">0</strong><span>DPS</span></div>
-  <div class="stat"><strong id="space">3%</strong><span>공간</span></div>
+  <div class="stat"><strong id="space">0%</strong><span>보드 점유</span></div>
 </div></div>
 
-<div class="card" style="padding:8px"><div class="tools">
+<div class="card source-card">
+  <div class="source-copy">
+    <b>CORE POWER</b>
+    <span>기체 기본 발전원 · 빵판 공간을 차지하지 않음</span>
+  </div>
+  <div class="source-terminals">
+    <span class="source-chip plus"><i></i> +12V</span>
+    <span class="source-chip minus"><i></i> GND</span>
+  </div>
+</div>
+
+<div class="card tools-card"><div class="tools">
   <button class="tool reco" id="reco">추천 배치</button>
   <button class="tool" id="wire">점퍼선</button>
   <button class="tool" id="rotate">90° 회전</button>
@@ -34,26 +56,42 @@
   <button class="tool" id="reset">초기화</button>
 </div></div>
 
-<div class="board-note"><span><b>같은 가로 5홀</b> = 내부 연결</span><span>가운데 홈 기준 좌/우 분리</span></div>
+<div class="board-note">
+  <span><b>가로 5홀</b> 내부 연결</span>
+  <span><b>빨강</b> +12V · <b>검정</b> GND</span>
+</div>
+
 <div class="board" id="board">
   <div class="trench"></div>
   <div class="strip-layer" id="stripLayer"></div>
   <svg id="wires" viewBox="0 0 1000 1200" preserveAspectRatio="none"><g id="wireLayer"></g></svg>
   <div class="grid" id="grid"></div>
   <div class="parts" id="parts"></div>
+  <div class="drop-preview" id="dropPreview"></div>
 </div>
 
-<div class="hint" id="hint"><b>아래 부품 트레이</b>에서 부품을 선택한 뒤 빵판의 시작 홀을 탭하세요.</div>
+<div class="hint" id="hint"><b>부품 버튼</b>을 열고 부품을 빵판 위로 드래그하세요.</div>
+
 <div class="actions">
   <button class="action" id="check">회로 검사</button>
   <button class="action go" id="fight">전투 시작</button>
 </div>
 </div>
 
-<div class="part-dock">
-  <div class="dock-head"><b>부품 트레이</b><span>부품 선택 → 빵판 탭</span></div>
-  <div class="palette" id="palette"></div>
+<div class="tray-shell open" id="trayShell">
+  <button class="tray-toggle" id="trayToggle" type="button">
+    <span id="trayToggleText">부품 트레이 닫기</span><b id="trayArrow">▼</b>
+  </button>
+  <div class="part-dock" id="partDock">
+    <div class="dock-head">
+      <div><b>부품 트레이</b><span>드래그해서 빵판에 설치</span></div>
+      <span class="dock-tip">회전은 위 버튼</span>
+    </div>
+    <div class="palette" id="palette"></div>
+  </div>
 </div>
+
+<div class="drag-ghost" id="dragGhost"></div>
 
 <div class="modal" id="modal">
   <div class="sheet">
@@ -63,6 +101,7 @@
     <button class="next" id="next">다음 스테이지</button>
   </div>
 </div>
-<script src="./app.js?v=0.0.2-test2"></script>
+
+<script src="./app.js?v=0.0.3-test3"></script>
 </body>
 </html>
